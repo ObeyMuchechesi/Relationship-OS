@@ -32,6 +32,7 @@ export default function WatchTogether() {
   const [dur, setDur] = useState(0);
   const [sharing, setSharing] = useState(false);
   const [remoteActive, setRemoteActive] = useState(false);
+  const [remoteStream, setRemoteStream] = useState(null);
   const [status, setStatus] = useState('Waiting for your partner…');
   const [error, setError] = useState('');
 
@@ -67,6 +68,7 @@ export default function WatchTogether() {
         }
       } else if (payload.action === 'shareEnd') {
         setRemoteActive(false);
+        setRemoteStream(null);
       }
     } finally {
       setTimeout(() => {
@@ -84,11 +86,11 @@ export default function WatchTogether() {
       if (e.candidate) send('ice', { candidate: e.candidate.toJSON() });
     };
     pc.ontrack = (e) => {
-      if (remoteRef.current) {
-        remoteRef.current.srcObject = e.streams[0];
-        setRemoteActive(true);
-        setStatus('Partner is sharing their screen');
-      }
+      // The <video> only mounts once remoteActive is true, so the stream is
+      // stored in state and attached by an effect after the element exists.
+      setRemoteStream(e.streams[0]);
+      setRemoteActive(true);
+      setStatus('Partner is sharing their screen');
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
@@ -129,9 +131,15 @@ export default function WatchTogether() {
     pcRef.current = null;
     setSharing(false);
     setRemoteActive(false);
+    setRemoteStream(null);
     if (notify) send('control', { action: 'shareEnd' });
     setStatus('Waiting for your partner…');
   };
+
+  // Attach the incoming WebRTC stream once its <video> element is rendered.
+  useEffect(() => {
+    if (remoteRef.current && remoteStream) remoteRef.current.srcObject = remoteStream;
+  }, [remoteStream, remoteActive]);
 
   // Poll partner signals.
   useEffect(() => {

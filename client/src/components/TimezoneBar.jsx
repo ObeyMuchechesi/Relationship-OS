@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Globe } from 'lucide-react';
+import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { fmtTime, zoneOf } from '../time';
 
@@ -8,13 +9,18 @@ import { fmtTime, zoneOf } from '../time';
 export default function TimezoneBar() {
   const { user } = useAuth();
   const [now, setNow] = useState(new Date());
+  const [partner, setPartner] = useState(null);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  const partner = user?.couple?.partner;
+  // The auth user's couple has no computed partner — it comes from /couple/me.
+  useEffect(() => {
+    api.get('/couple/me').then(({ data }) => setPartner(data.partner)).catch(() => {});
+  }, []);
+
   const mine = fmtTime(now, user);
 
   return (
