@@ -50,6 +50,15 @@ relationship-os/
 
 ## Deployment (Vercel)
 
+Production:
+
+- App: https://relationship-os-one-pi.vercel.app
+- API: https://relationship-os-api.vercel.app
+
+Both Vercel projects are connected to this repository with Root Directory
+set to `server` and `client` respectively, so pushing to `main` builds and
+deploys both automatically.
+
 Both halves deploy as separate Vercel projects:
 
 - **API** (`server/`): `vercel deploy` in `server/`. The entry is
