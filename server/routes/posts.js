@@ -3,6 +3,7 @@ import { Post } from '../models/index.js';
 import { protect } from '../middleware/auth.js';
 import { upload, storedPath } from '../utils/uploads.js';
 import { deliverDueMessages } from '../utils/cron.js';
+import { logActivity } from '../utils/activity.js';
 
 const router = express.Router();
 
@@ -35,6 +36,7 @@ router.post('/', async (req, res) => {
       author: req.user._id,
       text: text.trim(),
     });
+    logActivity('post', req.user, 'shared a note');
     res.json(await post.populate('author', 'name'));
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -52,6 +54,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
       text: (req.body.text || '').trim(),
       imageUrl: await storedPath(req.file),
     });
+    logActivity('post', req.user, 'shared a photo');
     res.json(await post.populate('author', 'name'));
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -69,6 +72,7 @@ router.post('/video', upload.single('video'), async (req, res) => {
       text: (req.body.text || '').trim(),
       videoUrl: await storedPath(req.file),
     });
+    logActivity('post', req.user, 'shared a video');
     res.json(await post.populate('author', 'name'));
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -86,6 +90,7 @@ router.post('/audio', upload.single('audio'), async (req, res) => {
       text: (req.body.text || '').trim(),
       audioUrl: await storedPath(req.file),
     });
+    logActivity('post', req.user, 'sent a voice note');
     res.json(await post.populate('author', 'name'));
   } catch (err) {
     res.status(500).json({ message: err.message });

@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models/index.js';
 import { protect } from '../middleware/auth.js';
 import { upload, storedPath } from '../utils/uploads.js';
+import { logActivity } from '../utils/activity.js';
 
 const router = express.Router();
 
@@ -30,6 +31,7 @@ router.post('/register', async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     const user = await User.create({ name, email, password: hash, timezone: timezone || 'Africa/Harare' });
+    logActivity('register', user, 'created an account');
 
     res.json({ token: sign(user._id), user: publicUser(user) });
   } catch (err) {
@@ -45,6 +47,7 @@ router.post('/login', async (req, res) => {
 
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(400).json({ message: 'Invalid credentials' });
+    logActivity('login', user, 'signed in');
 
     res.json({ token: sign(user._id), user: publicUser(user) });
   } catch (err) {
@@ -94,6 +97,7 @@ router.patch('/password', protect, async (req, res) => {
 
     req.user.password = await bcrypt.hash(newPassword, 10);
     await req.user.save();
+    logActivity('password-reset', req.user, 'changed their own password');
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ message: err.message });

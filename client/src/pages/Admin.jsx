@@ -44,10 +44,27 @@ const fmtWhen = (v) =>
       })
     : 'never';
 
+const relTime = (v) => {
+  const s = Math.max(0, Math.floor((Date.now() - new Date(v).getTime()) / 1000));
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+};
+
+const ACTIVITY_BADGE = {
+  login: 'bg-sky-100 text-sky-700',
+  register: 'bg-emerald-100 text-emerald-700',
+  post: 'bg-rose-100 text-rose-700',
+  couple: 'bg-violet-100 text-violet-700',
+  'password-reset': 'bg-amber-100 text-amber-700',
+};
+
 export default function Admin() {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
+  const [activity, setActivity] = useState([]);
   const [resetFor, setResetFor] = useState(null); // { email, tempPassword }
   const [busy, setBusy] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -61,6 +78,10 @@ export default function Admin() {
     api
       .get('/admin/users')
       .then(({ data }) => setUsers(data))
+      .catch(() => {});
+    api
+      .get('/admin/activity')
+      .then(({ data }) => setActivity(data))
       .catch(() => {});
   };
 
@@ -146,6 +167,45 @@ export default function Admin() {
           </div>
         </div>
       )}
+
+      <div className="card !p-0 overflow-hidden">
+        <div className="px-5 py-4 border-b border-stone-200 flex items-center justify-between">
+          <div>
+            <h2 className="h-section !text-base">Live activity feed</h2>
+            <p className="t-meta">Logins, signups, posts, space events and password resets.</p>
+          </div>
+          <span className="flex items-center gap-1.5 text-[11px] text-emerald-600">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            live
+          </span>
+        </div>
+        <ul className="max-h-72 overflow-y-auto divide-y divide-stone-100">
+          {activity.length === 0 && (
+            <li className="px-5 py-6 text-sm text-stone-400">No activity recorded yet.</li>
+          )}
+          {activity.map((a) => (
+            <li key={a._id} className="px-5 py-2.5 flex items-center gap-3">
+              <Avatar user={{ name: a.actorName, email: a.actorEmail }} className="w-6 h-6 text-[10px]" />
+              <span className="text-sm text-stone-700 min-w-0 flex-1 truncate">
+                <span className="font-medium text-stone-800">
+                  {a.actor?.name || a.actorName || 'Someone'}
+                </span>{' '}
+                {a.detail}
+              </span>
+              <span
+                className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${
+                  ACTIVITY_BADGE[a.type] || 'bg-stone-100 text-stone-500'
+                }`}
+              >
+                {a.type}
+              </span>
+              <span className="text-[11px] text-stone-400 tabular-nums shrink-0 w-16 text-right">
+                {relTime(a.createdAt)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       {resetFor && (
         <div className="card border-amber-300 bg-amber-50">

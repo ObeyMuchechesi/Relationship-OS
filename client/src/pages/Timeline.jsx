@@ -1,9 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Mic, Clock, Video, Trash2, Send, Clock4 } from 'lucide-react';
+import { Camera, Mic, Clock, Video, Trash2, Send, Clock4, Square } from 'lucide-react';
 import api, { mediaUrl } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { fmtDateTime } from '../time';
 import { Avatar } from '../components/Layout';
+
+const pickAudioMime = () => {
+  if (typeof MediaRecorder === 'undefined') return null;
+  const candidates = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg;codecs=opus'];
+  try {
+    return candidates.find((t) => MediaRecorder.isTypeSupported(t)) || '';
+  } catch {
+    return '';
+  }
+};
 
 export default function Timeline() {
   const { user } = useAuth();
@@ -14,9 +24,13 @@ export default function Timeline() {
   const [schedText, setSchedText] = useState('');
   const [schedAt, setSchedAt] = useState('');
   const [error, setError] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [recSeconds, setRecSeconds] = useState(0);
   const fileRef = useRef(null);
-  const audioRef = useRef(null);
   const videoRef = useRef(null);
+  const recorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const discardRef = useRef(false);
 
   const load = () =>
     api.get('/posts').then(({ data }) => setPosts(data)).catch(() => setPosts([]));
@@ -56,6 +70,78 @@ export default function Timeline() {
       e.target.value = '';
     }
   };
+
+  // Record a voice note in the browser — no file picker involved. The clip is
+  // captured with MediaRecorder and posted straight to the timeline.
+  const startRecording = async () => {
+    if (recording) return;
+    const mimeType = pickAudioMime();
+    if (mimeType === null) {
+      alert('Voice recording is not supported in this browser.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      chunksRef.current = [];
+      discardRef.current = false;
+
+      rec.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setRecording(false);
+        setRecSeconds(0);
+        const discarded = discardRef.current;
+        const type = rec.mimeType || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type });
+        chunksRef.current = [];
+        if (discarded || blob.size < 256) return;
+
+        const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
+        const body = new FormData();
+        body.append('audio', blob, `voice-note.${ext}`);
+        setBusy(true);
+        try {
+          const { data } = await api.post('/posts/audio', body);
+          setPosts((prev) => [data, ...prev]);
+        } catch (err) {
+          alert(err.response?.data?.message || 'Could not send the voice note.');
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      rec.start();
+      recorderRef.current = rec;
+      setRecording(true);
+      setRecSeconds(0);
+      // Side effects stay out of the state updater (React may invoke it twice
+      // in StrictMode); a plain increment here, auto-stop handled by an effect.
+      rec._ticker = setInterval(() => setRecSeconds((s) => s + 1), 1000);
+    } catch {
+      alert('Microphone access was blocked — allow the microphone for this site and try again.');
+    }
+  };
+
+  const stopRecording = (discard = false) => {
+    discardRef.current = discard;
+    try {
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+        clearInterval(recorderRef.current._ticker);
+        recorderRef.current.stop();
+      }
+    } catch {
+      /* nothing to stop */
+    }
+  };
+
+  // Auto-send a voice note that reaches the one-minute limit.
+  useEffect(() => {
+    if (recording && recSeconds >= 60) stopRecording(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording, recSeconds]);
 
   const schedule = async (e) => {
     e.preventDefault();
@@ -115,20 +201,33 @@ export default function Timeline() {
           </button>
           <button
             type="button"
-            className="btn-ghost"
-            onClick={() => audioRef.current?.click()}
+            className={`btn-ghost ${
+              recording ? '!border-rose-300 !bg-rose-50 !text-rose-600' : ''
+            }`}
+            onClick={() => (recording ? stopRecording(true) : startRecording())}
             disabled={busy}
           >
-            <Mic className="w-4 h-4" />
-            Voice note
+            <Mic className={`w-4 h-4 ${recording ? 'animate-pulse' : ''}`} />
+            {recording ? 'Cancel' : 'Voice note'}
           </button>
+          {recording && (
+            <button
+              type="button"
+              className="btn-primary !bg-red-500 hover:!bg-red-600"
+              onClick={() => stopRecording(false)}
+              disabled={busy}
+            >
+              <Square className="w-4 h-4" fill="currentColor" />
+              Stop · {String(Math.floor(recSeconds / 60)).padStart(2, '0')}:
+              {String(recSeconds % 60).padStart(2, '0')}
+            </button>
+          )}
           <button type="button" className="btn-ghost" onClick={() => setScheduling((s) => !s)}>
             <Clock className="w-4 h-4" />
             Schedule
           </button>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={upload('image')} />
           <input ref={videoRef} type="file" accept="video/*" hidden onChange={upload('video')} />
-          <input ref={audioRef} type="file" accept="audio/*" hidden onChange={upload('audio')} />
         </div>
 
         {scheduling && (

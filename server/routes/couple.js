@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { Couple } from '../models/index.js';
 import { protect } from '../middleware/auth.js';
 import { upload, storedPath } from '../utils/uploads.js';
+import { logActivity } from '../utils/activity.js';
 
 const router = express.Router();
 
@@ -52,6 +53,7 @@ router.post('/', protect, async (req, res) => {
     const couple = await Couple.create({ members: [req.user._id], inviteCode });
     req.user.couple = couple._id;
     await req.user.save();
+    logActivity('couple', req.user, 'created the shared space');
 
     const populated = await Couple.findById(couple._id).populate('members', 'name email timezone avatarUrl');
     res.json(publicCouple(populated, req.user._id));
@@ -75,6 +77,7 @@ router.post('/join', protect, async (req, res) => {
     await couple.save();
     req.user.couple = couple._id;
     await req.user.save();
+    logActivity('couple', req.user, 'joined the shared space');
 
     const populated = await Couple.findById(couple._id).populate('members', 'name email timezone');
     res.json(publicCouple(populated, req.user._id));

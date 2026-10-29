@@ -8,8 +8,10 @@ import {
   BucketItem,
   ScheduledMessage,
   GiftIdea,
+  Activity,
 } from '../models/index.js';
 import { protect } from '../middleware/auth.js';
+import { logActivity } from '../utils/activity.js';
 
 const router = express.Router();
 
@@ -76,6 +78,19 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// Recent activity feed: logins, signups, posts, space events, password resets.
+router.get('/activity', async (req, res) => {
+  try {
+    const items = await Activity.find()
+      .sort({ createdAt: -1 })
+      .limit(60)
+      .populate('actor', 'name email role');
+    res.json(items);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Who is using the system. Passwords are one-way bcrypt hashes — they are
 // never returned; a forgotten password is handled with a reset instead.
 router.get('/users', async (req, res) => {
@@ -117,6 +132,7 @@ router.post('/users/:id/reset-password', async (req, res) => {
 
     user.password = await bcrypt.hash(temp, 10);
     await user.save();
+    logActivity('password-reset', req.user, `reset the password for ${user.email}`);
 
     res.json({ email: user.email, tempPassword: temp });
   } catch (err) {

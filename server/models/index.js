@@ -77,6 +77,18 @@ const SignalSchema = new Schema({
 }, { timestamps: true });
 SignalSchema.index({ createdAt: 1 }, { expireAfterSeconds: 120 });
 
+// Admin activity feed: who did what, newest first. Names are denormalized
+// so the feed stays readable even if the account is later deleted.
+const ActivitySchema = new Schema({
+  actor: { type: Schema.Types.ObjectId, ref: 'User' },
+  actorName: { type: String, default: '' },
+  actorEmail: { type: String, default: '' },
+  type: { type: String, required: true }, // register | login | post | couple | password-reset
+  detail: { type: String, default: '' },
+}, { timestamps: true });
+ActivitySchema.index({ createdAt: 1 }, { expireAfterSeconds: 180 * 86400 });
+ActivitySchema.index({ createdAt: -1 });
+
 export const User = model('User', UserSchema);
 export const Couple = model('Couple', CoupleSchema);
 export const Post = model('Post', PostSchema);
@@ -85,3 +97,4 @@ export const BucketItem = model('BucketItem', BucketItemSchema);
 export const ScheduledMessage = model('ScheduledMessage', ScheduledMessageSchema);
 export const GiftIdea = model('GiftIdea', GiftIdeaSchema);
 export const Signal = model('Signal', SignalSchema);
+export const Activity = model('Activity', ActivitySchema);
