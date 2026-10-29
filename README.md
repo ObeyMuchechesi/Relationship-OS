@@ -71,9 +71,22 @@ Both halves deploy as separate Vercel projects:
   (e.g. `https://your-api.vercel.app/api`). CORS on the API only allows
   origins listed in `CLIENT_URL`.
 
+### Uploads (Cloudflare R2)
+
+Set these four environment variables on the API project and uploads persist
+in an R2 bucket, served privately through `GET /uploads/:key`:
+
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_R2_ACCESS_KEY_ID`
+- `CLOUDFLARE_R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET_NAME`
+
+Without them the app falls back to local disk storage (ephemeral `/tmp` on
+Vercel). `R2_ENDPOINT` can override the endpoint for local S3-compatible
+mocks. Note Vercel's request-body cap (~4.5 MB) still limits upload size.
+
 ### Known serverless limitations
 
-- Uploaded photos/voice notes are written to `/tmp`, which is ephemeral on
-  Vercel — use object storage (S3/R2) if uploads must persist.
 - Cron runs are not available on serverless; scheduled messages are delivered
   lazily on requests instead (see above).
+- Without R2 configured, uploads are ephemeral (see Uploads above).

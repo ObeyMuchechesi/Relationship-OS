@@ -10,7 +10,7 @@ import moodRoutes from './routes/mood.js';
 import bucketRoutes from './routes/bucket.js';
 import scheduledRoutes from './routes/scheduled.js';
 import giftRoutes from './routes/gifts.js';
-import { uploadsDir } from './utils/uploads.js';
+import { uploadsDir, useR2, getUpload, validUploadKey } from './utils/uploads.js';
 import { startCron } from './utils/cron.js';
 
 export const app = express();
@@ -49,7 +49,25 @@ app.use('/api', async (req, res, next) => {
   }
 });
 
-app.use('/uploads', express.static(uploadsDir));
+// Uploaded files: served from disk locally, or proxied out of R2 when the
+// bucket is configured (keys are opaque to callers, so the bucket stays private).
+if (useR2) {
+  app.get('/uploads/:key', async (req, res) => {
+    try {
+      const { key } = req.params;
+      if (!validUploadKey(key)) return res.status(404).json({ message: 'Not found' });
+      const object = await getUpload(key);
+      if (object.ContentType) res.set('Content-Type', object.ContentType);
+      if (object.ContentLength) res.set('Content-Length', String(object.ContentLength));
+      res.set('Cache-Control', 'public, max-age=31536000, immutable');
+      object.Body.pipe(res);
+    } catch {
+      res.status(404).json({ message: 'Not found' });
+    }
+  });
+} else {
+  app.use('/uploads', express.static(uploadsDir));
+}
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

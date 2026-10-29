@@ -1,12 +1,15 @@
 import express from 'express';
 import { Post } from '../models/index.js';
 import { protect } from '../middleware/auth.js';
-import { upload } from '../utils/uploads.js';
+import { upload, useR2, putUpload } from '../utils/uploads.js';
 import { deliverDueMessages } from '../utils/cron.js';
 
 const router = express.Router();
 
 router.use(protect);
+
+// Where a just-uploaded file lives: R2 when configured, disk otherwise.
+const storedPath = (file) => (useR2 ? putUpload(file) : Promise.resolve(`/uploads/${file.filename}`));
 
 const timeline = (coupleId) =>
   Post.find({ couple: coupleId })
@@ -50,7 +53,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
       couple: req.user.couple._id,
       author: req.user._id,
       text: (req.body.text || '').trim(),
-      imageUrl: `/uploads/${req.file.filename}`,
+      imageUrl: await storedPath(req.file),
     });
     res.json(await post.populate('author', 'name'));
   } catch (err) {
@@ -67,7 +70,7 @@ router.post('/audio', upload.single('audio'), async (req, res) => {
       couple: req.user.couple._id,
       author: req.user._id,
       text: (req.body.text || '').trim(),
-      audioUrl: `/uploads/${req.file.filename}`,
+      audioUrl: await storedPath(req.file),
     });
     res.json(await post.populate('author', 'name'));
   } catch (err) {
