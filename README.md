@@ -74,11 +74,11 @@ Both halves deploy as separate Vercel projects:
 ### Uploads (Backblaze B2 / S3-compatible storage)
 
 Set these five environment variables on the API project and uploads persist
-in an S3-compatible bucket (Backblaze B2 by default), served privately
+in an S3-compatible bucket (Cloudflare R2 or Backblaze B2), served privately
 through `GET /uploads/:key`:
 
-- `S3_ENDPOINT` — e.g. `https://s3.us-west-004.backblazeb2.com`
-- `S3_REGION` — must match the endpoint, e.g. `us-west-004`
+- `S3_ENDPOINT` — e.g. `https://<account_id>.r2.cloudflarestorage.com` (Cloudflare R2) or `https://s3.us-west-004.backblazeb2.com` (Backblaze B2)
+- `S3_REGION` — `auto` for R2; for B2 the region matching the endpoint, e.g. `us-west-004`
 - `S3_ACCESS_KEY_ID` — the B2 application key ID
 - `S3_SECRET_ACCESS_KEY` — the B2 application key
 - `S3_BUCKET` — bucket name
