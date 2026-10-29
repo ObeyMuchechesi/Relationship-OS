@@ -12,7 +12,7 @@ import DateNight from './pages/DateNight';
 import Gifts from './pages/Gifts';
 import Settings from './pages/Settings';
 
-function Protected({ children }) {
+function Protected({ children, needsCouple = true }) {
   const { user, loading } = useAuth();
   if (loading) {
     return (
@@ -20,6 +20,9 @@ function Protected({ children }) {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
+  // A signed-in user without a shared space can only create or join one,
+  // so send them to onboarding (but never from the onboarding screen itself).
+  if (needsCouple && !user.couple) return <Navigate to="/onboarding" replace />;
   return children;
 }
 
@@ -40,7 +43,7 @@ export default function App() {
       <Route
         path="/onboarding"
         element={
-          <Protected>
+          <Protected needsCouple={false}>
             <Onboarding />
           </Protected>
         }
