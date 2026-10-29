@@ -12,7 +12,7 @@ import scheduledRoutes from './routes/scheduled.js';
 import giftRoutes from './routes/gifts.js';
 import adminRoutes from './routes/admin.js';
 import roomRoutes from './routes/room.js';
-import { uploadsDir, useR2, getUpload, validUploadKey } from './utils/uploads.js';
+import { uploadsDir, useStorage, getUpload, validUploadKey } from './utils/uploads.js';
 import { startCron } from './utils/cron.js';
 
 export const app = express();
@@ -51,9 +51,9 @@ app.use('/api', async (req, res, next) => {
   }
 });
 
-// Uploaded files: served from disk locally, or proxied out of R2 when the
-// bucket is configured (keys are opaque to callers, so the bucket stays private).
-if (useR2) {
+// Uploaded files: served from disk locally, or proxied out of object storage
+// when the bucket is configured (keys are opaque, so the bucket stays private).
+if (useStorage) {
   app.get('/uploads/:key', async (req, res) => {
     try {
       const { key } = req.params;

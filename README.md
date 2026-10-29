@@ -71,22 +71,25 @@ Both halves deploy as separate Vercel projects:
   (e.g. `https://your-api.vercel.app/api`). CORS on the API only allows
   origins listed in `CLIENT_URL`.
 
-### Uploads (Cloudflare R2)
+### Uploads (Backblaze B2 / S3-compatible storage)
 
-Set these four environment variables on the API project and uploads persist
-in an R2 bucket, served privately through `GET /uploads/:key`:
+Set these five environment variables on the API project and uploads persist
+in an S3-compatible bucket (Backblaze B2 by default), served privately
+through `GET /uploads/:key`:
 
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_R2_ACCESS_KEY_ID`
-- `CLOUDFLARE_R2_SECRET_ACCESS_KEY`
-- `R2_BUCKET_NAME`
+- `S3_ENDPOINT` — e.g. `https://s3.us-west-004.backblazeb2.com`
+- `S3_REGION` — must match the endpoint, e.g. `us-west-004`
+- `S3_ACCESS_KEY_ID` — the B2 application key ID
+- `S3_SECRET_ACCESS_KEY` — the B2 application key
+- `S3_BUCKET` — bucket name
 
 Without them the app falls back to local disk storage (ephemeral `/tmp` on
-Vercel). `R2_ENDPOINT` can override the endpoint for local S3-compatible
-mocks. Note Vercel's request-body cap (~4.5 MB) still limits upload size.
+Vercel). `S3_FORCE_PATH_STYLE=false` switches to virtual-hosted addressing
+for endpoints that need it. Note Vercel's request-body cap (~4.5 MB) still
+limits upload size.
 
 ### Known serverless limitations
 
 - Cron runs are not available on serverless; scheduled messages are delivered
   lazily on requests instead (see above).
-- Without R2 configured, uploads are ephemeral (see Uploads above).
+- Without object storage configured, uploads are ephemeral (see Uploads above).
