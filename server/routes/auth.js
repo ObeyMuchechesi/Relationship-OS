@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/index.js';
 import { protect } from '../middleware/auth.js';
+import { upload, storedPath } from '../utils/uploads.js';
 
 const router = express.Router();
 
@@ -14,6 +15,8 @@ const publicUser = (user) => ({
   email: user.email,
   timezone: user.timezone,
   couple: user.couple || null,
+  avatarUrl: user.avatarUrl || '',
+  role: user.role || 'user',
 });
 
 router.post('/register', async (req, res) => {
@@ -62,6 +65,36 @@ router.patch('/me', protect, async (req, res) => {
     if (timezone) req.user.timezone = timezone;
     await req.user.save();
     res.json(publicUser(req.user));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Profile picture upload (multipart field: "avatar")
+router.post('/avatar', protect, upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No image uploaded' });
+    req.user.avatarUrl = await storedPath(req.file);
+    await req.user.save();
+    res.json(publicUser(req.user));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Change own password
+router.patch('/password', protect, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters' });
+    }
+    const ok = await bcrypt.compare(currentPassword || '', req.user.password);
+    if (!ok) return res.status(400).json({ message: 'Current password is incorrect' });
+
+    req.user.password = await bcrypt.hash(newPassword, 10);
+    await req.user.save();
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

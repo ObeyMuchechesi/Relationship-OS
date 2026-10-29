@@ -1,15 +1,12 @@
 import express from 'express';
 import { Post } from '../models/index.js';
 import { protect } from '../middleware/auth.js';
-import { upload, useR2, putUpload } from '../utils/uploads.js';
+import { upload, storedPath } from '../utils/uploads.js';
 import { deliverDueMessages } from '../utils/cron.js';
 
 const router = express.Router();
 
 router.use(protect);
-
-// Where a just-uploaded file lives: R2 when configured, disk otherwise.
-const storedPath = (file) => (useR2 ? putUpload(file) : Promise.resolve(`/uploads/${file.filename}`));
 
 const timeline = (coupleId) =>
   Post.find({ couple: coupleId })
@@ -54,6 +51,23 @@ router.post('/image', upload.single('image'), async (req, res) => {
       author: req.user._id,
       text: (req.body.text || '').trim(),
       imageUrl: await storedPath(req.file),
+    });
+    res.json(await post.populate('author', 'name'));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Short video upload (multipart, field name: "video")
+router.post('/video', upload.single('video'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No video uploaded' });
+
+    const post = await Post.create({
+      couple: req.user.couple._id,
+      author: req.user._id,
+      text: (req.body.text || '').trim(),
+      videoUrl: await storedPath(req.file),
     });
     res.json(await post.populate('author', 'name'));
   } catch (err) {

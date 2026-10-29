@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import api from '../api';
+import { Camera, Mic, Clock, Video, Trash2, Send, Clock4 } from 'lucide-react';
+import api, { mediaUrl } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { fmtDateTime } from '../time';
+import { Avatar } from '../components/Layout';
 
 export default function Timeline() {
   const { user } = useAuth();
@@ -14,6 +16,7 @@ export default function Timeline() {
   const [error, setError] = useState('');
   const fileRef = useRef(null);
   const audioRef = useRef(null);
+  const videoRef = useRef(null);
 
   const load = () =>
     api.get('/posts').then(({ data }) => setPosts(data)).catch(() => setPosts([]));
@@ -40,13 +43,14 @@ export default function Timeline() {
   const upload = (kind) => async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const field = kind === 'image' ? 'image' : 'audio';
     const body = new FormData();
-    body.append(field, file);
+    body.append(kind, file);
     setBusy(true);
     try {
       const { data } = await api.post(`/posts/${kind}`, body);
       setPosts((prev) => [data, ...prev]);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Upload failed — the file may be too large (4 MB max).');
     } finally {
       setBusy(false);
       e.target.value = '';
@@ -77,7 +81,7 @@ export default function Timeline() {
 
   return (
     <div className="space-y-5">
-      <h1 className="font-display text-2xl font-semibold text-stone-800">Timeline</h1>
+      <h1 className="h-display">Timeline</h1>
 
       <form onSubmit={postText} className="card space-y-3">
         <textarea
@@ -88,6 +92,7 @@ export default function Timeline() {
         />
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn-primary" disabled={busy || !text.trim()}>
+            <Send className="w-4 h-4" />
             Post
           </button>
           <button
@@ -96,7 +101,17 @@ export default function Timeline() {
             onClick={() => fileRef.current?.click()}
             disabled={busy}
           >
-            📷 Photo
+            <Camera className="w-4 h-4" />
+            Photo
+          </button>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => videoRef.current?.click()}
+            disabled={busy}
+          >
+            <Video className="w-4 h-4" />
+            Video
           </button>
           <button
             type="button"
@@ -104,12 +119,15 @@ export default function Timeline() {
             onClick={() => audioRef.current?.click()}
             disabled={busy}
           >
-            🎤 Voice note
+            <Mic className="w-4 h-4" />
+            Voice note
           </button>
           <button type="button" className="btn-ghost" onClick={() => setScheduling((s) => !s)}>
-            💌 Schedule
+            <Clock className="w-4 h-4" />
+            Schedule
           </button>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={upload('image')} />
+          <input ref={videoRef} type="file" accept="video/*" hidden onChange={upload('video')} />
           <input ref={audioRef} type="file" accept="audio/*" hidden onChange={upload('audio')} />
         </div>
 
@@ -137,9 +155,7 @@ export default function Timeline() {
                 Schedule it
               </button>
             </div>
-            <p className="text-xs text-stone-400">
-              Deliver time shown in your timezone ({user?.timezone}).
-            </p>
+            <p className="t-meta">Delivery shown in your timezone ({user?.timezone}).</p>
             {error && <p className="text-sm text-rose-600">{error}</p>}
           </div>
         )}
@@ -147,43 +163,53 @@ export default function Timeline() {
 
       <div className="space-y-4">
         {posts.length === 0 && (
-          <p className="text-stone-400 py-10 text-center">
-            Nothing here yet — say something nice.
-          </p>
+          <p className="text-stone-400 py-10 text-center">Nothing here yet — say something nice.</p>
         )}
 
         {posts.map((post) => (
           <div key={post._id} className="card">
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded-full bg-rose-100 grid place-items-center text-sm">
-                  {post.author?.name?.[0] || '?'}
-                </span>
+              <div className="flex items-center gap-2.5">
+                <Avatar user={post.author} />
                 <div>
                   <p className="text-sm font-medium text-stone-800">{post.author?.name}</p>
-                  <p className="text-xs text-stone-400">{fmtDateTime(post.createdAt, post.author)}</p>
+                  <p className="t-meta">{fmtDateTime(post.createdAt, post.author)}</p>
                 </div>
               </div>
               {String(post.author?._id) === String(user?.id) && (
                 <button
                   onClick={() => remove(post._id)}
-                  className="text-xs text-stone-400 hover:text-rose-600"
+                  className="text-stone-400 hover:text-rose-600 p-1.5"
+                  aria-label="Delete post"
                 >
-                  Delete
+                  <Trash2 className="w-4 h-4" />
                 </button>
               )}
             </div>
 
             {post.text && <p className="text-stone-700 whitespace-pre-wrap">{post.text}</p>}
             {post.imageUrl && (
-              <img src={post.imageUrl} alt="" className="mt-2 rounded-xl max-h-96 object-cover" />
+              <img
+                src={mediaUrl(post.imageUrl)}
+                alt=""
+                className="mt-2 rounded-xl max-h-96 w-full object-cover"
+              />
+            )}
+            {post.videoUrl && (
+              <video
+                controls
+                playsInline
+                src={mediaUrl(post.videoUrl)}
+                className="mt-2 rounded-xl max-h-96 w-full bg-black"
+              />
             )}
             {post.audioUrl && (
-              <audio controls src={post.audioUrl} className="mt-2 w-full" />
+              <audio controls src={mediaUrl(post.audioUrl)} className="mt-2 w-full" />
             )}
 
             {post.kind === 'scheduled' && (
-              <span className="inline-block mt-2 text-[10px] uppercase tracking-widest text-rose-400">
+              <span className="inline-flex items-center gap-1 mt-2 text-[10px] uppercase tracking-widest text-rose-400">
+                <Clock4 className="w-3 h-3" />
                 scheduled message
               </span>
             )}

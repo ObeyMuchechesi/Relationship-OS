@@ -25,7 +25,7 @@ export async function deliverDueMessages(filter = {}) {
     await Post.create({
       couple: msg.couple,
       author: msg.author,
-      text: `💌 ${msg.text}`,
+      text: msg.text,
       kind: 'scheduled',
     });
     delivered++;

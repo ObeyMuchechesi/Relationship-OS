@@ -54,7 +54,7 @@ router.patch('/:id', async (req, res) => {
       await Post.create({
         couple: gift.couple,
         author: req.user._id,
-        text: `🎁 Gift sent: ${gift.title}`,
+        text: `Gift sent: ${gift.title}`,
         kind: 'gift',
       });
     }

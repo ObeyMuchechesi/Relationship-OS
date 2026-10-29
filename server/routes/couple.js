@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import { Couple } from '../models/index.js';
 import { protect } from '../middleware/auth.js';
+import { upload, storedPath } from '../utils/uploads.js';
 
 const router = express.Router();
 
@@ -18,12 +19,14 @@ const publicCouple = (couple, userId) => {
       name: m.name,
       email: m.email,
       timezone: m.timezone,
+      avatarUrl: m.avatarUrl || '',
     })),
     partner,
     reunionDate: couple.reunionDate,
     reunionPlace: couple.reunionPlace,
     savingsGoal: couple.savingsGoal,
     savingsCurrent: couple.savingsCurrent,
+    dashboardBg: couple.dashboardBg || '',
     startedAt: couple.startedAt,
   };
 };
@@ -50,7 +53,7 @@ router.post('/', protect, async (req, res) => {
     req.user.couple = couple._id;
     await req.user.save();
 
-    const populated = await Couple.findById(couple._id).populate('members', 'name email timezone');
+    const populated = await Couple.findById(couple._id).populate('members', 'name email timezone avatarUrl');
     res.json(publicCouple(populated, req.user._id));
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -92,9 +95,38 @@ router.patch('/me', protect, async (req, res) => {
     if (reunionPlace !== undefined) couple.reunionPlace = reunionPlace;
     if (savingsGoal !== undefined) couple.savingsGoal = Number(savingsGoal) || 0;
     if (savingsCurrent !== undefined) couple.savingsCurrent = Number(savingsCurrent) || 0;
+    if (req.body.dashboardBg !== undefined) {
+      const bg = String(req.body.dashboardBg);
+      // Only allow our own upload paths, preset gradients, or http(s) URLs.
+      if (
+        !bg ||
+        bg.startsWith('/uploads/') ||
+        /^preset:(linear|radial)-gradient/.test(bg) ||
+        /^https?:\/\//.test(bg)
+      ) {
+        couple.dashboardBg = bg;
+      }
+    }
     await couple.save();
 
     const populated = await Couple.findById(couple._id).populate('members', 'name email timezone');
+    res.json(publicCouple(populated, req.user._id));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Upload a custom dashboard background (multipart field: "image")
+router.post('/background', protect, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No image uploaded' });
+    if (!req.user.couple) return res.status(404).json({ message: 'No couple space yet' });
+
+    const couple = req.user.couple;
+    couple.dashboardBg = await storedPath(req.file);
+    await couple.save();
+
+    const populated = await Couple.findById(couple._id).populate('members', 'name email timezone avatarUrl');
     res.json(publicCouple(populated, req.user._id));
   } catch (err) {
     res.status(500).json({ message: err.message });

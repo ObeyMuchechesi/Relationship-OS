@@ -9,8 +9,10 @@ import Timeline from './pages/Timeline';
 import BucketList from './pages/BucketList';
 import Reunion from './pages/Reunion';
 import DateNight from './pages/DateNight';
+import WatchTogether from './pages/WatchTogether';
 import Gifts from './pages/Gifts';
 import Settings from './pages/Settings';
+import Admin from './pages/Admin';
 
 function Protected({ children, needsCouple = true }) {
   const { user, loading } = useAuth();
@@ -61,8 +63,10 @@ export default function App() {
         <Route path="/bucket-list" element={<BucketList />} />
         <Route path="/reunion" element={<Reunion />} />
         <Route path="/date-night" element={<DateNight />} />
+        <Route path="/watch" element={<WatchTogether />} />
         <Route path="/gifts" element={<Gifts />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/admin" element={<Admin />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

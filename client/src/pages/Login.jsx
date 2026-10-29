@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Heart } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 
@@ -31,8 +32,8 @@ export default function Login() {
     <div className="min-h-screen grid place-items-center bg-rose-50/40 px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-6">
-          <div className="text-4xl mb-2">💞</div>
-          <h1 className="font-display text-2xl font-semibold text-stone-800">Relationship OS</h1>
+          <Heart className="w-10 h-10 text-rose-500 mx-auto mb-2" fill="currentColor" strokeWidth={1.5} />
+          <h1 className="font-display text-2xl font-bold text-stone-800">Relationship OS</h1>
           <p className="text-sm text-stone-500 mt-1">Welcome back.</p>
         </div>
 

@@ -14,4 +14,14 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Resolve a stored file path (`/uploads/...`) against the API origin.
+// In dev the Vite proxy serves /uploads from the same origin, so it passes through.
+export function mediaUrl(path) {
+  if (!path) return '';
+  if (/^https?:/.test(path)) return path;
+  const base = import.meta.env.VITE_API_URL;
+  if (!base || base.startsWith('/')) return path;
+  return base.replace(/\/api$/, '') + path;
+}
+
 export default api;

@@ -10,6 +10,8 @@ import moodRoutes from './routes/mood.js';
 import bucketRoutes from './routes/bucket.js';
 import scheduledRoutes from './routes/scheduled.js';
 import giftRoutes from './routes/gifts.js';
+import adminRoutes from './routes/admin.js';
+import roomRoutes from './routes/room.js';
 import { uploadsDir, useR2, getUpload, validUploadKey } from './utils/uploads.js';
 import { startCron } from './utils/cron.js';
 
@@ -78,6 +80,8 @@ app.use('/api/mood', moodRoutes);
 app.use('/api/bucket', bucketRoutes);
 app.use('/api/scheduled', scheduledRoutes);
 app.use('/api/gifts', giftRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/room', roomRoutes);
 
 // Local development: listen + run the every-minute delivery cron.
 // On Vercel the platform invokes the exported app instead (see api/index.js),

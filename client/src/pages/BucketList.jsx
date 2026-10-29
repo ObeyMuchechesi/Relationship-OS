@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
 import api from '../api';
 
 export default function BucketList() {
@@ -42,13 +43,11 @@ export default function BucketList() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-semibold text-stone-800">Bucket list</h1>
-          <p className="text-sm text-stone-500">
-            {done} of {items.length} done — keep collecting moments.
-          </p>
-        </div>
+      <div>
+        <h1 className="h-display">Bucket list</h1>
+        <p className="t-body text-stone-500">
+          {done} of {items.length} done — keep collecting moments.
+        </p>
       </div>
 
       <form onSubmit={add} className="card space-y-3">
@@ -67,6 +66,7 @@ export default function BucketList() {
           />
         </div>
         <button className="btn-primary" disabled={busy || !title.trim()}>
+          <Plus className="w-4 h-4" />
           Add to the list
         </button>
       </form>
@@ -99,9 +99,10 @@ export default function BucketList() {
             </div>
             <button
               onClick={() => remove(item._id)}
-              className="text-xs text-stone-400 hover:text-rose-600"
+              className="text-stone-400 hover:text-rose-600 p-1.5"
+              aria-label="Remove item"
             >
-              Remove
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         ))}

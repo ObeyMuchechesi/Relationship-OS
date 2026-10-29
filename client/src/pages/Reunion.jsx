@@ -52,10 +52,10 @@ export default function Reunion() {
 
   return (
     <div className="space-y-5">
-      <h1 className="font-display text-2xl font-semibold text-stone-800">The reunion</h1>
+      <h1 className="h-display">The reunion</h1>
 
       <div className="card">
-        <h2 className="font-display text-lg text-stone-800 mb-3">Countdown</h2>
+        <h2 className="h-section mb-3">Countdown</h2>
         {couple?.reunionDate ? (
           <Countdown
             target={couple.reunionDate}

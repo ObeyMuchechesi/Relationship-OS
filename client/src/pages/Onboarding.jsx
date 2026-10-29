@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Home } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 
@@ -42,8 +43,8 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen grid place-items-center bg-rose-50/40 px-4">
       <div className="w-full max-w-md text-center">
-        <div className="text-4xl mb-2">🏡</div>
-        <h1 className="font-display text-2xl font-semibold text-stone-800">Your shared space</h1>
+        <Home className="w-10 h-10 text-rose-500 mx-auto mb-2" strokeWidth={1.5} />
+        <h1 className="font-display text-2xl font-bold text-stone-800">Your shared space</h1>
         <p className="text-sm text-stone-500 mt-1 mb-6">
           Hi {user?.name}. Create a space for the two of you, or join your partner's with their
           invite code.

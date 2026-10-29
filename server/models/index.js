@@ -8,6 +8,9 @@ const UserSchema = new Schema({
   password: { type: String, required: true },
   timezone: { type: String, default: 'Africa/Harare' },
   couple: { type: Schema.Types.ObjectId, ref: 'Couple', default: null },
+  avatarUrl: { type: String, default: '' },
+  role: { type: String, default: 'user' }, // user | admin
+  lastSeen: { type: Date, default: null },
 }, { timestamps: true });
 
 const CoupleSchema = new Schema({
@@ -17,6 +20,7 @@ const CoupleSchema = new Schema({
   reunionPlace: { type: String, default: '' },
   savingsGoal: { type: Number, default: 0 },
   savingsCurrent: { type: Number, default: 0 },
+  dashboardBg: { type: String, default: '' },
   startedAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
@@ -26,6 +30,7 @@ const PostSchema = new Schema({
   text: { type: String, default: '' },
   imageUrl: { type: String, default: '' },
   audioUrl: { type: String, default: '' },
+  videoUrl: { type: String, default: '' },
   kind: { type: String, default: 'post' }, // post | scheduled | gift
 }, { timestamps: true });
 
@@ -62,6 +67,16 @@ const GiftIdeaSchema = new Schema({
   createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
+// Short-lived messages for the watch-together room (WebRTC signaling +
+// playback sync). Read-once, auto-expired so the collection stays small.
+const SignalSchema = new Schema({
+  couple: { type: Schema.Types.ObjectId, ref: 'Couple', required: true },
+  from: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  type: { type: String, required: true }, // source | control | sdp-offer | sdp-answer | ice
+  payload: { type: Schema.Types.Mixed, default: {} },
+}, { timestamps: true });
+SignalSchema.index({ createdAt: 1 }, { expireAfterSeconds: 120 });
+
 export const User = model('User', UserSchema);
 export const Couple = model('Couple', CoupleSchema);
 export const Post = model('Post', PostSchema);
@@ -69,3 +84,4 @@ export const Mood = model('Mood', MoodSchema);
 export const BucketItem = model('BucketItem', BucketItemSchema);
 export const ScheduledMessage = model('ScheduledMessage', ScheduledMessageSchema);
 export const GiftIdea = model('GiftIdea', GiftIdeaSchema);
+export const Signal = model('Signal', SignalSchema);

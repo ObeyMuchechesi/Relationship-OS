@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react';
+import { Lightbulb, Gift, CheckCircle2, Trash2 } from 'lucide-react';
 import api from '../api';
 
 const STATUSES = ['idea', 'planned', 'sent'];
-const LABELS = { idea: '💡 Idea', planned: '🎁 Planned', sent: '✅ Sent' };
+const LABELS = {
+  idea: { text: 'Idea', Icon: Lightbulb, cls: 'border-stone-200 bg-stone-50 text-stone-600' },
+  planned: { text: 'Planned', Icon: Gift, cls: 'border-amber-200 bg-amber-50 text-amber-700' },
+  sent: { text: 'Sent', Icon: CheckCircle2, cls: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+};
 
 export default function Gifts() {
   const [gifts, setGifts] = useState([]);
@@ -43,8 +48,8 @@ export default function Gifts() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="font-display text-2xl font-semibold text-stone-800">Gift ideas</h1>
-        <p className="text-sm text-stone-500">
+        <h1 className="h-display">Gift ideas</h1>
+        <p className="t-body text-stone-500">
           Click a gift to move it: idea → planned → sent (sent gifts post to your timeline).
         </p>
       </div>
@@ -96,9 +101,10 @@ export default function Gifts() {
               <p className="font-medium text-stone-800">{gift.title}</p>
               <button
                 onClick={() => remove(gift._id)}
-                className="text-xs text-stone-400 hover:text-rose-600"
+                className="text-stone-400 hover:text-rose-600 p-1"
+                aria-label="Delete gift"
               >
-                Delete
+                <Trash2 className="w-4 h-4" />
               </button>
             </div>
 
@@ -119,15 +125,15 @@ export default function Gifts() {
 
             <button
               onClick={() => cycle(gift)}
-              className={`mt-3 text-xs px-2.5 py-1 rounded-full border transition ${
-                gift.status === 'sent'
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : gift.status === 'planned'
-                    ? 'border-amber-200 bg-amber-50 text-amber-700'
-                    : 'border-stone-200 bg-stone-50 text-stone-600'
+              className={`mt-3 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition ${
+                LABELS[gift.status]?.cls || LABELS.idea.cls
               }`}
             >
-              {LABELS[gift.status]}
+              {(() => {
+                const { Icon } = LABELS[gift.status] || LABELS.idea;
+                return <Icon className="w-3.5 h-3.5" />;
+              })()}
+              {(LABELS[gift.status] || LABELS.idea).text}
             </button>
           </div>
         ))}
