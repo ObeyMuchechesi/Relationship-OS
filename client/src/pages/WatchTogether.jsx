@@ -85,6 +85,7 @@ export default function WatchTogether() {
   const isHostRef = useRef(false);
   const sendingRef = useRef(false); // true while we push an action we just applied
   const seenRef = useRef(new Set());
+  const pickedIdRef = useRef(null);
 
   const ytWrapRef = useRef(null);
   const ytPlayerRef = useRef(null);
@@ -261,11 +262,20 @@ export default function WatchTogether() {
   };
 
   const pickMovie = (m) => {
-    setPicked(m);
-    setPickedInfo(null);
+    // Re-picking the title that's already up must not clear its details —
+    // nothing would refetch them and the trailer would vanish.
+    if (String(pickedIdRef.current) !== String(m.id)) {
+      setPicked(m);
+      setPickedInfo(null);
+    }
     setYtHosting(true); // we chose it, so our player leads
     send('movie', { id: m.id, title: m.title, year: m.year, rating: m.rating, overview: m.overview, poster: m.poster, backdrop: m.backdrop });
   };
+
+  // Track the current pick for the signal handler below.
+  useEffect(() => {
+    pickedIdRef.current = picked?.id ?? null;
+  }, [picked]);
 
   // Initial catalog page.
   useEffect(() => {
@@ -389,10 +399,13 @@ export default function WatchTogether() {
             setYtKey(''); // a loaded video takes over the player
             setStatus('Playing together');
           } else if (sig.type === 'movie' && sig.payload?.title) {
-            // Partner picked a movie — show it for both of us, their player leads.
-            setPicked(sig.payload);
-            setPickedInfo(null);
+            // Partner picked a movie — show it for both of us, their player
+            // leads. Same title as what's already up? Keep it playing.
             setYtHosting(false);
+            if (String(pickedIdRef.current) !== String(sig.payload?.id)) {
+              setPicked(sig.payload);
+              setPickedInfo(null);
+            }
           } else if (sig.type === 'control') {
             applyControl(sig.payload);
           } else if (sig.type === 'sdp-offer') {
