@@ -371,21 +371,20 @@ export default function WatchTogether() {
     }
   }, [remoteStream, remoteActive]);
 
-  // Poll partner signals.
+  // Poll partner signals. Each poll continues from the last successful one
+  // (small overlap) instead of a fixed lookback, so a tab that slept in the
+  // background still receives whatever the partner sent meanwhile.
   useEffect(() => {
     let stopped = false;
-    let first = true;
+    let lastPoll = 0;
     const tick = async () => {
+      const since = lastPoll ? lastPoll - 2000 : Date.now() - 120000;
       try {
-        // The first poll looks further back (signals live for 2 minutes) so a
-        // partner who opens the page after a share started still catches the
-        // offer and sees the screen automatically.
-        const window_ = first ? 120000 : 4000;
-        first = false;
         const { data } = await api.get('/room/signal', {
-          params: { since: new Date(Date.now() - window_).toISOString() },
+          params: { since: new Date(since).toISOString() },
         });
         if (stopped) return;
+        lastPoll = Date.now();
         for (const sig of data) {
           if (seenRef.current.has(sig.id)) continue;
           seenRef.current.add(sig.id);
@@ -430,9 +429,15 @@ export default function WatchTogether() {
     };
     tick();
     const id = setInterval(tick, POLL_MS);
+    // Returning to the tab immediately catches up on anything sent while hidden.
+    const onVis = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', onVis);
     return () => {
       stopped = true;
       clearInterval(id);
+      document.removeEventListener('visibilitychange', onVis);
     };
   }, []);
 
