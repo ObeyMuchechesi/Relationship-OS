@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.use(protect);
 
-const ALLOWED = ['source', 'control', 'sdp-offer', 'sdp-answer', 'ice'];
+const ALLOWED = ['source', 'control', 'sdp-offer', 'sdp-answer', 'ice', 'movie'];
 
 const coupleId = (req, res) => {
   const id = req.user.couple?._id;
@@ -26,6 +26,7 @@ router.post('/signal', async (req, res) => {
     const { type, payload } = req.body || {};
     if (!ALLOWED.includes(type)) return res.status(400).json({ message: 'Bad signal type' });
 
+    // Signals stay inside the space — they are never logged anywhere else.
     await Signal.create({ couple, from: req.user._id, type, payload: payload || {} });
     res.json({ ok: true });
   } catch (err) {

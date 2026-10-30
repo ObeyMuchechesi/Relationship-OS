@@ -79,6 +79,20 @@ export async function getUpload(key) {
   return s3.send(new GetObjectCommand({ Bucket: storageConfig.bucket, Key: key }));
 }
 
+// Best-effort removal of a stored upload (used when a removed partner's
+// content is cleaned out of a space). Accepts the stored path (/uploads/key).
+export async function deleteUpload(stored) {
+  const key = String(stored || '').replace(/^\/uploads\//, '');
+  if (!validUploadKey(key)) return;
+  if (useStorage) {
+    const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+    const s3 = await storageClient();
+    await s3.send(new DeleteObjectCommand({ Bucket: storageConfig.bucket, Key: key }));
+  } else {
+    fs.promises.unlink(path.join(uploadsDir, key)).catch(() => {});
+  }
+}
+
 // With object storage, files are buffered in memory (no writable disk on
 // Vercel); the request-body cap still applies. Without it, disk as before.
 const maxSize = useStorage || process.env.VERCEL ? 4 * 1024 * 1024 : 25 * 1024 * 1024;

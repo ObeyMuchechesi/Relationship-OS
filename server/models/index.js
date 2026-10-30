@@ -15,6 +15,10 @@ const UserSchema = new Schema({
 
 const CoupleSchema = new Schema({
   members: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+  // Whoever generated the invite code (the space creator). They control the
+  // space, including removing the partner. Falls back to members[0] for
+  // spaces created before this field existed.
+  creator: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   inviteCode: { type: String, unique: true, required: true },
   reunionDate: { type: Date, default: null },
   reunionPlace: { type: String, default: '' },
@@ -77,13 +81,15 @@ const SignalSchema = new Schema({
 }, { timestamps: true });
 SignalSchema.index({ createdAt: 1 }, { expireAfterSeconds: 120 });
 
-// Admin activity feed: who did what, newest first. Names are denormalized
-// so the feed stays readable even if the account is later deleted.
+// Admin activity feed: account-level events only (signups, sign-ins,
+// password resets). What a couple does inside their space is never logged
+// here — it stays between the two of them. Names are denormalized so the
+// feed stays readable even if the account is later deleted.
 const ActivitySchema = new Schema({
   actor: { type: Schema.Types.ObjectId, ref: 'User' },
   actorName: { type: String, default: '' },
   actorEmail: { type: String, default: '' },
-  type: { type: String, required: true }, // register | login | post | couple | password-reset
+  type: { type: String, required: true }, // register | login | password-reset
   detail: { type: String, default: '' },
 }, { timestamps: true });
 ActivitySchema.index({ createdAt: 1 }, { expireAfterSeconds: 180 * 86400 });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Check } from 'lucide-react';
+import { Camera, Check, UserMinus } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { listTimezones } from '../time';
@@ -44,6 +44,23 @@ export default function Settings() {
     } finally {
       setBusy(false);
       e.target.value = '';
+    }
+  };
+
+  const removePartner = async () => {
+    if (!couple?.partner) return;
+    const ok = window.confirm(
+      `Remove ${couple.partner.name} from this space?\n\nEverything they added here — posts, photos, voice notes, moods, gifts and plans — is removed with them.`
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const { data } = await api.delete('/couple/member');
+      setCouple(data);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Could not remove partner');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -194,6 +211,24 @@ export default function Settings() {
             <p className="t-meta mt-4">
               Share the code above with your partner so they can join your space.
             </p>
+          )}
+
+          {couple.partner && couple.canManage && (
+            <div className="mt-4 pt-4 border-t border-stone-200">
+              <button
+                type="button"
+                className="btn-ghost text-xs text-rose-600"
+                disabled={busy}
+                onClick={removePartner}
+              >
+                <UserMinus className="w-3.5 h-3.5" />
+                Remove {couple.partner.name} from this space
+              </button>
+              <p className="t-meta mt-1.5">
+                You created this space, so you can remove your partner — their posts, photos and
+                plans are deleted along with them, and they can start fresh with a new code.
+              </p>
+            </div>
           )}
         </div>
       )}

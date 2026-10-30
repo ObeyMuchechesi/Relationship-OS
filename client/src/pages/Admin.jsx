@@ -55,8 +55,6 @@ const relTime = (v) => {
 const ACTIVITY_BADGE = {
   login: 'bg-sky-100 text-sky-700',
   register: 'bg-emerald-100 text-emerald-700',
-  post: 'bg-rose-100 text-rose-700',
-  couple: 'bg-violet-100 text-violet-700',
   'password-reset': 'bg-amber-100 text-amber-700',
 };
 
@@ -155,7 +153,7 @@ export default function Admin() {
         </div>
       )}
 
-      {stats && stats.moodSplit.length > 0 && (
+      {stats && stats.moodSplit && stats.moodSplit.length > 0 && (
         <div className="card">
           <h2 className="h-section !text-base mb-3">Mood split</h2>
           <div className="flex flex-wrap gap-3">
@@ -172,7 +170,7 @@ export default function Admin() {
         <div className="px-5 py-4 border-b border-stone-200 flex items-center justify-between">
           <div>
             <h2 className="h-section !text-base">Live activity feed</h2>
-            <p className="t-meta">Logins, signups, posts, space events and password resets.</p>
+            <p className="t-meta">Account events only — what couples do stays private to their space.</p>
           </div>
           <span className="flex items-center gap-1.5 text-[11px] text-emerald-600">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -245,7 +243,6 @@ export default function Admin() {
                 <th className="px-3 py-2.5">Email</th>
                 <th className="px-3 py-2.5">Role</th>
                 <th className="px-3 py-2.5">Space</th>
-                <th className="px-3 py-2.5">Posts</th>
                 <th className="px-3 py-2.5">Joined</th>
                 <th className="px-3 py-2.5">Last seen</th>
                 <th className="px-3 py-2.5" />
@@ -275,7 +272,6 @@ export default function Admin() {
                   <td className="px-3 py-2.5 text-stone-500">
                     {u.inCouple ? 'paired' : 'solo'}
                   </td>
-                  <td className="px-3 py-2.5 tabular-nums">{u.posts}</td>
                   <td className="px-3 py-2.5 text-stone-500">{fmtWhen(u.createdAt)}</td>
                   <td className="px-3 py-2.5 text-stone-500">{fmtWhen(u.lastSeen)}</td>
                   <td className="px-3 py-2.5 text-right">

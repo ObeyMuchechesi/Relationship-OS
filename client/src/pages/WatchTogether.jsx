@@ -8,6 +8,8 @@ import {
   Link as LinkIcon,
   ExternalLink,
   Info,
+  Search,
+  Film,
 } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -35,6 +37,17 @@ export default function WatchTogether() {
   const [remoteStream, setRemoteStream] = useState(null);
   const [status, setStatus] = useState('Waiting for your partner…');
   const [error, setError] = useState('');
+
+  // Movie catalog (fetched through our own API — TMDB never sees your users).
+  const [movies, setMovies] = useState([]);
+  const [moviePage, setMoviePage] = useState(1);
+  const [movieTotal, setMovieTotal] = useState(1);
+  const [movieMode, setMovieMode] = useState('popular'); // popular | search
+  const [query, setQuery] = useState('');
+  const [movieBusy, setMovieBusy] = useState(false);
+  const [movieErr, setMovieErr] = useState('');
+  const [picked, setPicked] = useState(null);
+  const [pickedInfo, setPickedInfo] = useState(null);
 
   const videoRef = useRef(null);
   const remoteRef = useRef(null);
@@ -86,7 +99,7 @@ export default function WatchTogether() {
       if (e.candidate) send('ice', { candidate: e.candidate.toJSON() });
     };
     pc.ontrack = (e) => {
-      // The <video> only mounts once remoteActive is true, so the stream is
+      // The <video> only mounts once remoteStream is set, so the stream is
       // stored in state and attached by an effect after the element exists.
       setRemoteStream(e.streams[0]);
       setRemoteActive(true);
@@ -95,6 +108,7 @@ export default function WatchTogether() {
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         setRemoteActive(false);
+        setRemoteStream(null);
       }
     };
     return pc;
@@ -136,18 +150,81 @@ export default function WatchTogether() {
     setStatus('Waiting for your partner…');
   };
 
-  // Attach the incoming WebRTC stream once its <video> element is rendered.
+  const loadMovies = async (mode, page = 1, q = '') => {
+    setMovieBusy(true);
+    setMovieErr('');
+    try {
+      const { data } =
+        mode === 'search'
+          ? await api.get('/movies/search', { params: { q, page } })
+          : await api.get('/movies/popular', { params: { page } });
+      setMovieMode(mode);
+      setMoviePage(data.page || 1);
+      setMovieTotal(data.totalPages || 1);
+      setMovies((prev) => (page === 1 ? data.movies : [...prev, ...data.movies]));
+    } catch (err) {
+      setMovieErr(err.response?.data?.message || 'Movie catalog unavailable right now.');
+    } finally {
+      setMovieBusy(false);
+    }
+  };
+
+  const searchMovies = (e) => {
+    e.preventDefault();
+    if (!query.trim()) return loadMovies('popular', 1);
+    loadMovies('search', 1, query.trim());
+  };
+
+  const pickMovie = (m) => {
+    setPicked(m);
+    setPickedInfo(null);
+    send('movie', { id: m.id, title: m.title, year: m.year, rating: m.rating, overview: m.overview, poster: m.poster, backdrop: m.backdrop });
+  };
+
+  // Initial catalog page.
   useEffect(() => {
-    if (remoteRef.current && remoteStream) remoteRef.current.srcObject = remoteStream;
+    loadMovies('popular', 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Details + where-to-watch for whichever movie is picked (either partner).
+  useEffect(() => {
+    if (!picked?.id) return;
+    let cancelled = false;
+    api
+      .get(`/movies/${picked.id}`)
+      .then(({ data }) => !cancelled && setPickedInfo(data))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [picked?.id]);
+
+  // Attach the incoming WebRTC stream as soon as its <video> element renders,
+  // and start playback explicitly — muted autoplay is always allowed, so the
+  // partner sees the share the moment it arrives, with no click needed.
+  useEffect(() => {
+    const el = remoteRef.current;
+    if (el && remoteStream) {
+      el.srcObject = remoteStream;
+      el.muted = true;
+      el.play().catch(() => {});
+    }
   }, [remoteStream, remoteActive]);
 
   // Poll partner signals.
   useEffect(() => {
     let stopped = false;
+    let first = true;
     const tick = async () => {
       try {
+        // The first poll looks further back (signals live for 2 minutes) so a
+        // partner who opens the page after a share started still catches the
+        // offer and sees the screen automatically.
+        const window_ = first ? 120000 : 4000;
+        first = false;
         const { data } = await api.get('/room/signal', {
-          params: { since: new Date(Date.now() - 4000).toISOString() },
+          params: { since: new Date(Date.now() - window_).toISOString() },
         });
         if (stopped) return;
         for (const sig of data) {
@@ -161,6 +238,10 @@ export default function WatchTogether() {
             setActiveSource(sig.payload.url);
             setSource(sig.payload.url);
             setStatus('Playing together');
+          } else if (sig.type === 'movie' && sig.payload?.title) {
+            // Partner picked a movie — show it for both of us.
+            setPicked(sig.payload);
+            setPickedInfo(null);
           } else if (sig.type === 'control') {
             applyControl(sig.payload);
           } else if (sig.type === 'sdp-offer') {
@@ -296,15 +377,135 @@ export default function WatchTogether() {
               {s.label}
             </a>
           ))}
+        </div>          <p className="t-meta flex items-start gap-1.5">
+            <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            Open a service above in a shared call, or screen-share it — we don't host or embed
+            third-party streams ourselves.
+          </p>
         </div>
-        <p className="t-meta flex items-start gap-1.5">
-          <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-          Open a service above in a shared call, or screen-share it — we don't host or embed
-          third-party streams ourselves.
-        </p>
-      </div>
 
-      <div className="grid lg:grid-cols-2 gap-5">
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="h-section !text-base flex items-center gap-2">
+              <Film className="w-4 h-4 text-rose-500" />
+              Movie night
+            </h2>
+            <span className="t-meta">Pick for both of you</span>
+          </div>
+
+          {picked && (
+            <div className="flex gap-3 rounded-xl bg-stone-50 border border-stone-200 p-3">
+              {picked.poster ? (
+                <img src={picked.poster} alt="" className="w-20 shrink-0 rounded-lg shadow-sm" />
+              ) : (
+                <div className="w-20 h-28 shrink-0 rounded-lg bg-stone-200 grid place-items-center text-stone-400">
+                  <Film className="w-6 h-6" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="font-display font-semibold text-stone-800">
+                  {picked.title}{' '}
+                  {picked.year && <span className="t-meta font-normal">({picked.year})</span>}
+                </p>
+                <p className="t-meta">
+                  {picked.rating > 0 && <>★ {picked.rating} · </>}tonight's pick — both of you are
+                  seeing this
+                </p>
+                {picked.overview && (
+                  <p className="text-sm text-stone-600 mt-1 overflow-hidden line-clamp-3">
+                    {picked.overview}
+                  </p>
+                )}
+                {pickedInfo?.providers?.options?.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {pickedInfo.providers.options.slice(0, 8).map((o, i) => (
+                      <a
+                        key={`${o.name}-${i}`}
+                        href={pickedInfo.providers.link || undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1 text-[11px] bg-white border border-stone-200 rounded-full px-2 py-0.5 hover:border-rose-300"
+                      >
+                        {o.logo && <img src={o.logo} alt="" className="w-4 h-4 rounded-sm" />}
+                        {o.name}
+                        <span className="text-stone-400">· {o.label}</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {pickedInfo && pickedInfo.providers?.options?.length === 0 && (
+                  <p className="t-meta mt-1">
+                    No streaming listings for your region — screen-share a streaming app instead.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={searchMovies} className="flex gap-2">
+            <input
+              className="input flex-1"
+              placeholder="Search the catalog…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <button className="btn-ghost" disabled={movieBusy} type="submit">
+              <Search className="w-4 h-4" />
+              Search
+            </button>
+          </form>
+
+          {movieErr && <p className="text-sm text-rose-600">{movieErr}</p>}
+
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+            {movies.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => pickMovie(m)}
+                className="group text-left"
+                title={`Pick ${m.title}`}
+              >
+                {m.poster ? (
+                  <img
+                    src={m.poster}
+                    alt={m.title}
+                    loading="lazy"
+                    className="w-full rounded-lg aspect-[2/3] object-cover group-hover:ring-2 group-hover:ring-rose-400 transition"
+                  />
+                ) : (
+                  <div className="w-full aspect-[2/3] rounded-lg bg-stone-100 grid place-items-center px-1 text-center text-[10px] text-stone-400">
+                    {m.title}
+                  </div>
+                )}
+                <p className="text-[10px] text-stone-600 truncate mt-1 group-hover:text-rose-600">
+                  {m.title}
+                </p>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              className="btn-ghost !py-1.5 text-xs"
+              disabled={movieBusy || moviePage <= 1}
+              onClick={() => loadMovies(movieMode, moviePage - 1, query.trim())}
+            >
+              ← Previous
+            </button>
+            <button
+              type="button"
+              className="btn-ghost !py-1.5 text-xs"
+              disabled={movieBusy || moviePage >= movieTotal}
+              onClick={() => loadMovies(movieMode, moviePage + 1, query.trim())}
+            >
+              {movieBusy ? 'Loading…' : 'More movies →'}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-5">
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="h-section !text-base">Shared player</h2>
@@ -368,13 +569,19 @@ export default function WatchTogether() {
           )}
 
           <div className="relative rounded-xl bg-black aspect-video overflow-hidden">
-            {remoteActive ? (
-              <video ref={remoteRef} autoPlay playsInline className="w-full h-full object-contain" />
+            {remoteStream ? (
+              <video
+                ref={remoteRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-contain"
+              />
             ) : (
               <div className="absolute inset-0 grid place-items-center text-stone-400 text-sm text-center px-4">
                 {sharing
                   ? 'You are sharing — your partner sees this window.'
-                  : "Nothing shared yet — you'll see your partner's screen here."}
+                  : "Nothing shared yet — you'll see your partner's screen here automatically."}
               </div>
             )}
           </div>

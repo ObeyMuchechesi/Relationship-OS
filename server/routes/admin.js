@@ -41,7 +41,6 @@ router.get('/stats', async (req, res) => {
       active7d,
       postsPerDay,
       usersPerDay,
-      moodSplit,
     ] = await Promise.all([
       User.countDocuments(),
       Couple.countDocuments(),
@@ -61,27 +60,24 @@ router.get('/stats', async (req, res) => {
         { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, n: { $sum: 1 } } },
         { $sort: { _id: 1 } },
       ]),
-      Mood.aggregate([
-        { $group: { _id: '$mood', n: { $sum: 1 } } },
-        { $sort: { n: -1 } },
-      ]),
     ]);
 
     res.json({
       totals: { users, couples, posts, moods, bucketItems, gifts, scheduled, active7d },
       postsPerDay,
       usersPerDay,
-      moodSplit,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// Recent activity feed: logins, signups, posts, space events, password resets.
+// Account-level activity feed: signups, sign-ins, password resets only.
+// Couple-internal events are never written here, and the filter also hides
+// anything older that predates that policy — a couple's doings stay private.
 router.get('/activity', async (req, res) => {
   try {
-    const items = await Activity.find()
+    const items = await Activity.find({ type: { $in: ['register', 'login', 'password-reset'] } })
       .sort({ createdAt: -1 })
       .limit(60)
       .populate('actor', 'name email role');
@@ -96,11 +92,9 @@ router.get('/activity', async (req, res) => {
 router.get('/users', async (req, res) => {
   try {
     const users = await User.find().select('-password').sort({ createdAt: -1 }).limit(500).lean();
-    const perUserPosts = await Post.aggregate([
-      { $group: { _id: '$author', n: { $sum: 1 } } },
-    ]);
-    const counts = Object.fromEntries(perUserPosts.map((p) => [String(p._id), p.n]));
 
+    // Account facts only — no per-person content counts, since what happens
+    // inside a couple's space is their own business.
     res.json(
       users.map((u) => ({
         id: u._id,
@@ -112,7 +106,6 @@ router.get('/users', async (req, res) => {
         createdAt: u.createdAt,
         lastSeen: u.lastSeen,
         inCouple: Boolean(u.couple),
-        posts: counts[String(u._id)] || 0,
       }))
     );
   } catch (err) {
