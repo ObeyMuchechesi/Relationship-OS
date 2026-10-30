@@ -47,6 +47,29 @@ const shape = (m) => ({
   backdrop: m.backdrop_path ? `${IMG}/w780${m.backdrop_path}` : '',
 });
 
+// Official YouTube videos TMDB attaches to a title (trailers, teasers,
+// clips). Ranked so the best official trailer comes first — this is what
+// plays in the shared player when a movie is picked.
+const videoRank = (v) => {
+  const t = (v.type || '').toLowerCase();
+  if (t === 'trailer') return v.official ? 0 : 1;
+  if (t === 'teaser') return 2;
+  if (t === 'clip') return 3;
+  return 4;
+};
+
+const shapeVideos = (results = []) =>
+  results
+    .filter((v) => v.site === 'YouTube' && v.key)
+    .sort((a, b) => videoRank(a) - videoRank(b))
+    .slice(0, 8)
+    .map((v) => ({
+      key: v.key,
+      name: v.name || '',
+      type: v.type || '',
+      official: Boolean(v.official),
+    }));
+
 // Where to watch legally: TMDB's JustWatch-backed provider list per region.
 const shapeProviders = (results = {}) => {
   const region = results.ZW || results.US || Object.values(results)[0];
@@ -111,8 +134,15 @@ router.get(
       err.status = 400;
       throw err;
     }
-    const data = await tmdb(`/movie/${id}`, { append_to_response: 'watch/providers' });
-    return { ...shape(data), providers: shapeProviders(data.watch_providers?.results) };
+    const [data, videos] = await Promise.all([
+      tmdb(`/movie/${id}`, { append_to_response: 'watch/providers' }),
+      tmdb(`/movie/${id}/videos`).catch(() => ({ results: [] })),
+    ]);
+    return {
+      ...shape(data),
+      providers: shapeProviders(data.watch_providers?.results),
+      videos: shapeVideos(videos.results),
+    };
   })
 );
 

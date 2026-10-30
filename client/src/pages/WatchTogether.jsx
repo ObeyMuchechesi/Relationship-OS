@@ -24,6 +24,26 @@ const FREE_SOURCES = [
 
 const RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
+// YouTube IFrame API — loaded once, on demand.
+let ytPromise = null;
+const loadYT = () => {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (!ytPromise) {
+    ytPromise = new Promise((resolve) => {
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (typeof prev === 'function') prev();
+        resolve(window.YT);
+      };
+      const s = document.createElement('script');
+      s.src = 'https://www.youtube.com/iframe_api';
+      s.async = true;
+      document.head.appendChild(s);
+    });
+  }
+  return ytPromise;
+};
+
 export default function WatchTogether() {
   const { user } = useAuth();
   const [source, setSource] = useState('');
@@ -49,6 +69,14 @@ export default function WatchTogether() {
   const [picked, setPicked] = useState(null);
   const [pickedInfo, setPickedInfo] = useState(null);
 
+  // Trailer playback: TMDB's official YouTube clips play inside the shared
+  // player and sync like any other source — whoever picked hosts, the other
+  // follows.
+  const [ytKey, setYtKey] = useState('');
+  const [ytHost, setYtHost] = useState(false);
+  const [ytGesture, setYtGesture] = useState(false);
+  const [ytEmbedErr, setYtEmbedErr] = useState(false);
+
   const videoRef = useRef(null);
   const remoteRef = useRef(null);
   const pcRef = useRef(null);
@@ -58,6 +86,10 @@ export default function WatchTogether() {
   const sendingRef = useRef(false); // true while we push an action we just applied
   const seenRef = useRef(new Set());
 
+  const ytWrapRef = useRef(null);
+  const ytPlayerRef = useRef(null);
+  const ytHostRef = useRef(false);
+
   const send = useCallback(async (type, payload) => {
     try {
       await api.post('/room/signal', { type, payload });
@@ -66,9 +98,62 @@ export default function WatchTogether() {
     }
   }, []);
 
+  const setYtHosting = (v) => {
+    ytHostRef.current = v;
+    setYtHost(v);
+  };
+
+  const destroyYt = () => {
+    if (ytPlayerRef.current) {
+      try {
+        ytPlayerRef.current.destroy();
+      } catch {
+        /* player already gone */
+      }
+      ytPlayerRef.current = null;
+    }
+  };
+
+  // Broadcast trailer state — but only from the partner who picked it.
+  const onYtState = (state) => {
+    const p = ytPlayerRef.current;
+    if (!p || typeof p.getCurrentTime !== 'function') return;
+    const t = p.getCurrentTime() || 0;
+    if (state === 1) {
+      setYtGesture(false);
+      if (ytHostRef.current) send('control', { action: 'yt-play', time: t });
+    } else if ((state === 2 || state === 0) && ytHostRef.current) {
+      send('control', { action: 'yt-pause', time: t });
+    }
+  };
+
   const applyControl = (payload) => {
+    if (!payload) return;
+    const action = payload.action || '';
+
+    // Trailer commands drive the YouTube player instead of the <video>.
+    if (action.startsWith('yt-')) {
+      const p = ytPlayerRef.current;
+      if (!p || typeof p.seekTo !== 'function') return;
+      const t = Number(payload.time) || 0;
+      const cur = p.getCurrentTime?.() || 0;
+      if (action === 'yt-play') {
+        if (Math.abs(cur - t) > 1.2) p.seekTo(t, true);
+        p.playVideo?.();
+      } else if (action === 'yt-pause') {
+        p.pauseVideo?.();
+        if (Math.abs(cur - t) > 0.8) p.seekTo(t, true);
+      } else if (action === 'yt-sync') {
+        if (Math.abs(cur - t) > 1.5) {
+          p.seekTo(t, true);
+          if (p.getPlayerState?.() !== 1) p.playVideo?.();
+        }
+      }
+      return;
+    }
+
     const video = videoRef.current;
-    if (!video || !payload) return;
+    if (!video) return;
     applyingRef.current = true;
     try {
       if (payload.action === 'play') video.play().catch(() => {});
@@ -178,6 +263,7 @@ export default function WatchTogether() {
   const pickMovie = (m) => {
     setPicked(m);
     setPickedInfo(null);
+    setYtHosting(true); // we chose it, so our player leads
     send('movie', { id: m.id, title: m.title, year: m.year, rating: m.rating, overview: m.overview, poster: m.poster, backdrop: m.backdrop });
   };
 
@@ -187,7 +273,7 @@ export default function WatchTogether() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Details + where-to-watch for whichever movie is picked (either partner).
+  // Details, where-to-watch and trailer for whichever movie is picked.
   useEffect(() => {
     if (!picked?.id) return;
     let cancelled = false;
@@ -199,6 +285,69 @@ export default function WatchTogether() {
       cancelled = true;
     };
   }, [picked?.id]);
+
+  // The top-ranked official trailer becomes what plays in the shared player.
+  useEffect(() => {
+    const key = pickedInfo?.videos?.[0]?.key || '';
+    setYtKey(key);
+    setYtGesture(false);
+    setYtEmbedErr(false);
+    if (key) {
+      videoRef.current?.pause();
+      setStatus('Watching the trailer together');
+    }
+  }, [pickedInfo]);
+
+  // Create (or retarget) the YouTube player for the picked trailer.
+  useEffect(() => {
+    if (!ytKey) {
+      destroyYt();
+      return;
+    }
+    videoRef.current?.pause();
+    let cancelled = false;
+    loadYT()
+      .then((YT) => {
+        if (cancelled || !ytWrapRef.current) return;
+        if (ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
+          ytPlayerRef.current.loadVideoById(ytKey);
+          return;
+        }
+        const host = document.createElement('div');
+        host.style.cssText = 'position:absolute;inset:0';
+        ytWrapRef.current.appendChild(host);
+        const player = new YT.Player(host, {
+          videoId: ytKey,
+          playerVars: { enablejsapi: 1, origin: window.location.origin, rel: 0, playsinline: 1 },
+          events: {
+            onReady: () => {
+              if (!cancelled) ytPlayerRef.current?.playVideo?.();
+            },
+            onStateChange: (e) => onYtState(e.data),
+            onAutoplayBlocked: () => !cancelled && setYtGesture(true),
+            onError: () => !cancelled && setYtEmbedErr(true),
+          },
+        });
+        ytPlayerRef.current = player;
+      })
+      .catch(() => !cancelled && setYtEmbedErr(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ytKey]);
+
+  // Tear the player down when the watch room unmounts.
+  useEffect(() => () => destroyYt(), []);
+
+  // While hosting the trailer, correct the partner's drift every few seconds.
+  useEffect(() => {
+    if (!ytKey) return undefined;
+    const id = setInterval(() => {
+      const p = ytPlayerRef.current;
+      if (!ytHostRef.current || !p || typeof p.getCurrentTime !== 'function') return;
+      if (p.getPlayerState?.() !== 1) return;
+      send('control', { action: 'yt-sync', time: p.getCurrentTime() || 0 });
+    }, 4000);
+    return () => clearInterval(id);
+  }, [ytKey, send]);
 
   // Attach the incoming WebRTC stream as soon as its <video> element renders,
   // and start playback explicitly — muted autoplay is always allowed, so the
@@ -237,11 +386,13 @@ export default function WatchTogether() {
             setIsHost(false);
             setActiveSource(sig.payload.url);
             setSource(sig.payload.url);
+            setYtKey(''); // a loaded video takes over the player
             setStatus('Playing together');
           } else if (sig.type === 'movie' && sig.payload?.title) {
-            // Partner picked a movie — show it for both of us.
+            // Partner picked a movie — show it for both of us, their player leads.
             setPicked(sig.payload);
             setPickedInfo(null);
+            setYtHosting(false);
           } else if (sig.type === 'control') {
             applyControl(sig.payload);
           } else if (sig.type === 'sdp-offer') {
@@ -316,6 +467,7 @@ export default function WatchTogether() {
     setIsHost(true);
     setActiveSource(source.trim());
     send('source', { url: source.trim() });
+    setYtKey(''); // a loaded video takes over the player
     setStatus('Playing together (you are hosting)');
   };
 
@@ -344,8 +496,8 @@ export default function WatchTogether() {
         <h1 className="h-display">Watch together</h1>
       </div>
       <p className="t-body text-stone-600 -mt-2">
-        One of you loads a video or shares a screen — the other sees it live, in sync, on phone or
-        desktop.
+        One of you picks a movie, loads a video or shares a screen — the other sees it live, in
+        sync, on phone or desktop.
       </p>
 
       <div className="card space-y-3">
@@ -379,8 +531,9 @@ export default function WatchTogether() {
           ))}
         </div>          <p className="t-meta flex items-start gap-1.5">
             <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            Open a service above in a shared call, or screen-share it — we don't host or embed
-            third-party streams ourselves.
+            Open a service above in a shared call, or screen-share it — picking a movie plays its
+            official trailer here for both of you, and the full film stays with its legal
+            provider.
           </p>
         </div>
 
@@ -390,7 +543,7 @@ export default function WatchTogether() {
               <Film className="w-4 h-4 text-rose-500" />
               Movie night
             </h2>
-            <span className="t-meta">Pick for both of you</span>
+            <span className="t-meta">Pick one — its trailer plays here for both of you</span>
           </div>
 
           {picked && (
@@ -436,6 +589,11 @@ export default function WatchTogether() {
                 {pickedInfo && pickedInfo.providers?.options?.length === 0 && (
                   <p className="t-meta mt-1">
                     No streaming listings for your region — screen-share a streaming app instead.
+                  </p>
+                )}
+                {pickedInfo && (pickedInfo.videos || []).length === 0 && (
+                  <p className="t-meta mt-1">
+                    No trailer available for this title — use the watch links or screen-share.
                   </p>
                 )}
               </div>
@@ -512,7 +670,35 @@ export default function WatchTogether() {
             <span className="t-meta">{status}</span>
           </div>
 
-          {activeSource ? (
+          {ytKey ? (
+            <div className="relative rounded-xl bg-black aspect-video overflow-hidden">
+              <div
+                ref={ytWrapRef}
+                className="absolute inset-0 [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:!w-full [&_iframe]:!h-full"
+              />
+              {ytGesture && (
+                <button
+                  type="button"
+                  className="absolute inset-0 grid place-items-center bg-black/70 text-white"
+                  onClick={() => {
+                    setYtGesture(false);
+                    ytPlayerRef.current?.playVideo?.();
+                  }}
+                >
+                  <span className="btn-primary">
+                    <Play className="w-4 h-4" />
+                    Play the trailer
+                  </span>
+                </button>
+              )}
+              {ytEmbedErr && (
+                <div className="absolute inset-0 grid place-items-center text-stone-300 text-sm text-center px-4">
+                  This clip can't be embedded — use the watch links or screen-share the film
+                  instead.
+                </div>
+              )}
+            </div>
+          ) : activeSource ? (
             <video
               ref={videoRef}
               src={activeSource}
@@ -526,27 +712,38 @@ export default function WatchTogether() {
             </div>
           )}
 
-          <div className="flex items-center gap-3">
-            <button className="btn-ghost !px-3" onClick={togglePlay} disabled={!activeSource}>
-              {playing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            </button>
-            <input
-              type="range"
-              min={0}
-              max={dur || 0}
-              step={0.1}
-              value={pos}
-              onChange={seek}
-              disabled={!activeSource}
-              className="flex-1 accent-rose-500"
-            />
-            <span className="t-meta tabular-nums w-16 text-right">
-              {fmt(pos)} / {fmt(dur)}
-            </span>
-          </div>
+          {!ytKey && (
+            <div className="flex items-center gap-3">
+              <button className="btn-ghost !px-3" onClick={togglePlay} disabled={!activeSource}>
+                {playing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={dur || 0}
+                step={0.1}
+                value={pos}
+                onChange={seek}
+                disabled={!activeSource}
+                className="flex-1 accent-rose-500"
+              />
+              <span className="t-meta tabular-nums w-16 text-right">
+                {fmt(pos)} / {fmt(dur)}
+              </span>
+            </div>
+          )}
 
-          {!isHost && activeSource && (
-            <p className="t-meta">Your partner controls playback — it follows automatically.</p>
+          {ytKey ? (
+            <p className="t-meta">
+              {ytHost
+                ? 'You picked this — your partner’s player follows yours.'
+                : 'Your partner picked this — playback stays in sync automatically.'}
+            </p>
+          ) : (
+            !isHost &&
+            activeSource && (
+              <p className="t-meta">Your partner controls playback — it follows automatically.</p>
+            )
           )}
         </div>
 
