@@ -90,6 +90,9 @@ export default function WatchTogether() {
   const ytWrapRef = useRef(null);
   const ytPlayerRef = useRef(null);
   const ytHostRef = useRef(false);
+  const ytKindRef = useRef(''); // 'full' | 'trailer' — what the player is showing
+  const ytTrailerRef = useRef(''); // fallback trailer for the current pick
+  const ytFallbackRef = useRef(false); // full copy already fell back once
 
   const send = useCallback(async (type, payload) => {
     try {
@@ -165,6 +168,9 @@ export default function WatchTogether() {
             video.currentTime = payload.time;
           }
         }
+        // A sync means the host is actively playing — follow along even if we
+        // missed (or never got) the play signal.
+        if (video.paused && !video.ended) video.play().catch(() => {});
       } else if (payload.action === 'shareEnd') {
         setRemoteActive(false);
         setRemoteStream(null);
@@ -296,15 +302,41 @@ export default function WatchTogether() {
     };
   }, [picked?.id]);
 
-  // The top-ranked official trailer becomes what plays in the shared player.
+  // What plays for the pick: a legal full copy when one was found (archive.org
+  // file → the synced <video> engine, YouTube → the same player as trailers),
+  // otherwise the official trailer. Both sides derive this from their own
+  // details call, and ytHostRef decides whose controls lead.
   useEffect(() => {
-    const key = pickedInfo?.videos?.[0]?.key || '';
-    setYtKey(key);
+    const full = pickedInfo?.fullMovie || null;
+    const trailer = pickedInfo?.videos?.[0]?.key || '';
+    ytTrailerRef.current = trailer;
+    ytFallbackRef.current = false;
     setYtGesture(false);
     setYtEmbedErr(false);
-    if (key) {
+
+    if (full?.source === 'archive') {
+      ytKindRef.current = 'full';
+      setYtKey(''); // no YouTube player needed for a direct file
+      setActiveSource(full.url);
+      isHostRef.current = ytHostRef.current;
+      setIsHost(ytHostRef.current);
+      setStatus('Playing the full movie together');
+    } else if (full?.source === 'youtube') {
+      ytKindRef.current = 'full';
+      setActiveSource('');
+      setYtKey(full.key);
+      videoRef.current?.pause();
+      setStatus('Playing the full movie together');
+    } else if (trailer) {
+      ytKindRef.current = 'trailer';
+      setActiveSource('');
+      setYtKey(trailer);
       videoRef.current?.pause();
       setStatus('Watching the trailer together');
+    } else {
+      ytKindRef.current = '';
+      setYtKey('');
+      setStatus('Movie picked — nothing to stream yet');
     }
   }, [pickedInfo]);
 
@@ -335,7 +367,18 @@ export default function WatchTogether() {
             },
             onStateChange: (e) => onYtState(e.data),
             onAutoplayBlocked: () => !cancelled && setYtGesture(true),
-            onError: () => !cancelled && setYtEmbedErr(true),
+            onError: () => {
+              if (cancelled) return;
+              // A full movie the owner blocked from embedding (101/150) falls
+              // back to the trailer instead of going dark.
+              if (ytKindRef.current === 'full' && ytTrailerRef.current && !ytFallbackRef.current) {
+                ytFallbackRef.current = true;
+                setYtKey(ytTrailerRef.current);
+                setStatus('Full copy can’t be embedded — showing the trailer instead');
+              } else {
+                setYtEmbedErr(true);
+              }
+            },
           },
         });
         ytPlayerRef.current = player;
@@ -549,9 +592,9 @@ export default function WatchTogether() {
           ))}
         </div>          <p className="t-meta flex items-start gap-1.5">
             <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            Open a service above in a shared call, or screen-share it — picking a movie plays its
-            official trailer here for both of you, and the full film stays with its legal
-            provider.
+            Open a service above in a shared call, or screen-share it — picking a movie plays a
+            free legal full copy here for both of you when one exists, its official trailer
+            otherwise, and current films stay with their provider.
           </p>
         </div>
 
@@ -561,7 +604,7 @@ export default function WatchTogether() {
               <Film className="w-4 h-4 text-rose-500" />
               Movie night
             </h2>
-            <span className="t-meta">Pick one — its trailer plays here for both of you</span>
+            <span className="t-meta">Pick one — a free full movie plays here when one exists</span>
           </div>
 
           {picked && (
@@ -582,6 +625,11 @@ export default function WatchTogether() {
                   {picked.rating > 0 && <>★ {picked.rating} · </>}tonight's pick — both of you are
                   seeing this
                 </p>
+                {pickedInfo?.fullMovie && (
+                  <p className="text-xs text-emerald-600 mt-0.5">
+                    ▶ Full copy found — playing in the shared player
+                  </p>
+                )}
                 {picked.overview && (
                   <p className="text-sm text-stone-600 mt-1 overflow-hidden line-clamp-3">
                     {picked.overview}
@@ -723,6 +771,11 @@ export default function WatchTogether() {
               playsInline
               controls={false}
               className="w-full rounded-xl bg-black aspect-video"
+              onLoadedMetadata={() => {
+                // Full movies (and loaded links) start as soon as they're ready;
+                // the host's play event then syncs the partner.
+                videoRef.current?.play().catch(() => {});
+              }}
             />
           ) : (
             <div className="rounded-xl bg-stone-100 aspect-video grid place-items-center text-stone-400 text-sm">

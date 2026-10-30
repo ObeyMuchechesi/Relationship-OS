@@ -95,6 +95,18 @@ const ActivitySchema = new Schema({
 ActivitySchema.index({ createdAt: 1 }, { expireAfterSeconds: 180 * 86400 });
 ActivitySchema.index({ createdAt: -1 });
 
+// Resolved full-movie playback source per TMDB title (cached: YouTube's
+// search quota is 100 lookups/day, and archive.org deserves politeness).
+// source: youtube | archive | none  (none = checked, no legal full copy)
+const MovieSourceSchema = new Schema({
+  tmdbId: { type: Number, required: true, unique: true },
+  source: { type: String, required: true },
+  key: { type: String, default: '' }, // YouTube video id
+  url: { type: String, default: '' }, // direct archive.org file url
+  title: { type: String, default: '' },
+  checkedAt: { type: Date, default: Date.now },
+}, { timestamps: true });
+
 export const User = model('User', UserSchema);
 export const Couple = model('Couple', CoupleSchema);
 export const Post = model('Post', PostSchema);
@@ -104,3 +116,4 @@ export const ScheduledMessage = model('ScheduledMessage', ScheduledMessageSchema
 export const GiftIdea = model('GiftIdea', GiftIdeaSchema);
 export const Signal = model('Signal', SignalSchema);
 export const Activity = model('Activity', ActivitySchema);
+export const MovieSource = model('MovieSource', MovieSourceSchema);
